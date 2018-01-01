@@ -1,0 +1,97 @@
+{
+    "miner": "macmini",
+    "wallet": "3ABTHQuBacgADGywTmZnHdmG1PAcuk6RTg",
+    "mineAtLeast": 180000,
+    "changeThreshold": 0.1,
+    "changeThresholdBtc": 0.02,
+    "updateProfitMargins": 30000,
+    "currency": "EUR",
+    "Equihash": {
+      "speed": 330,
+      "multiplier": 1,
+      "port": 3357,
+      "server": "equihash",
+      "intensity": "auto",
+      "algo": "neoscrypt",
+      "miner": "ccminer"
+    },
+    "DaggerHashimoto" : {
+      "speed": 26,
+      "multiplier": 1000,
+      "port": 3353,
+      "server": "daggerhashimoto",
+      "miner": "ethminer"
+    },
+    "NeoScrypt": {
+      "speed": 860,
+      "multiplier": 1,
+      "port": 3341,
+      "server": "neoscrypt",
+      "intensity": 21,
+      "algo": "neoscrypt",
+      "miner": "ccminer"
+     },
+    "Lyra2REv2": {
+      "speed": 31.5,
+      "multiplier": 1,
+      "port": 3347,
+      "server": "lyra2rev2",
+      "intensity": 21,
+      "algo": "lyra2v2",
+      "miner": "ccminer"
+    },
+    "CryptoNight": {
+      "speed": 550,
+      "multiplier": 1,
+      "port": 3355,
+      "server": "cryptonight",
+      "intensity": "auto",
+      "algo": "cryptonight",
+      "miner": "ccminer"
+    },
+    "Blake2s": {
+      "speed": 3450,
+      "multiplier": 1,
+      "port": 3361,
+      "server": "blake2s",
+      "intensity": 28,
+      "algo": "blake2s",
+      "miner": "ccminer"
+    },
+    "Decred": {
+      "speed": 2470,
+      "multiplier": 1,
+      "port": 3360,
+      "server": "decred",
+      "intensity": 28,
+      "algo": "decred",
+      "miner": "ccminer"
+    },
+    "Skunk": {
+      "speed": 26.25,
+      "multiplier": 1000,
+      "port": 3362,
+      "server": "skunk",
+      "intensity": 21,
+      "algo": "skunk",
+      "miner": "ccminer"
+    },
+    "Lbry": {
+      "speed": 260,
+      "multiplier": 1,
+      "port": 3356,
+      "server": "lbry",
+      "intensity": 28,
+      "algo": "lbry",
+      "miner": "ccminer"
+    },
+    "Nist5": {
+      "speed": 39.5,
+      "multiplier": 1000,
+      "port": 3340,
+      "server": "nist5",
+      "intensity": 24,
+      "algo": "nist5",
+      "miner": "ccminer"
+    }
+}
