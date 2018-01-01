@@ -216,9 +216,9 @@ const getProfitData = function(cb) {
                     writeLine(
                         `\t${algo}${algo.length < 8 ? '\t\t' : '\t'} profit ${(currentPrice * profit[algo]).toFixed(
                             2
-                        )} ${currencySymbol}/day (${(1000 * profit[algo]).toFixed(4)}mBTC/day) ${compared > 0
+                        )} ${currencySymbol}/day (${(1000 * profit[algo]).toFixed(4)}mBTC/day) ${compared >= 0
                             ? fgGreen + 'up by'
-                            : fgRed + 'down by'} ${compared * currentPrice} ${currencySymbol} (${(1000 * compared
+                            : fgRed + 'down by'} ${(compared * currentPrice).toFixed(2)} ${currencySymbol} (${(1000 * compared
                         ).toFixed(4)} mBTC)${ttyReset}`,
                         0,
                         cursorPos
