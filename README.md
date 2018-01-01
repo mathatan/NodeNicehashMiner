@@ -9,7 +9,7 @@ ethminer work currently.
 
 ## Requirements
 
-You need a working version of Node.js but there are no other dependencies.
+You need a working version of Node.js v8+ and the miners but there are no other dependencies.
 
 ## Usage
 

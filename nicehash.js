@@ -202,24 +202,33 @@ const getProfitData = function(cb) {
                     algomap[profit[key]] = key;
                 });
 
+                if (JSON.stringify(profit) === JSON.stringify(previousProfits)) {
+                  cb('nochange');
+                  return;
+                }
+
                 const keys = Object.keys(algomap).sort(function(a, b) {
                     return parseFloat(b) - parseFloat(a);
                 });
 
-                writeLine('Status for algorithms:', 0, 4, true);
+                writeLine('Status for algorithms at ' + (new Date().toLocaleTimeString()) + ':', 0, 4, true);
                 cursorPos = 5;
 
                 keys.map(key => {
                     const algo = algomap[key];
-                    const compared = previousProfits ? previousProfits[algo] - profit[algo] : 0;
+                    const compared = previousProfits ? profit[algo] - previousProfits[algo]: 0;
 
                     writeLine(
-                        `\t${algo}${algo.length < 8 ? '\t\t' : '\t'} profit ${(currentPrice * profit[algo]).toFixed(
+                        `\t${algo}${algo.length < 8 ? '\t\t' : '\t'} ${(currentPrice * profit[algo]).toFixed(
                             2
-                        )} ${currencySymbol}/day (${(1000 * profit[algo]).toFixed(4)}mBTC/day) ${compared >= 0
-                            ? fgGreen + 'up by'
-                            : fgRed + 'down by'} ${(compared * currentPrice).toFixed(2)} ${currencySymbol} (${(1000 * compared
-                        ).toFixed(4)} mBTC)${ttyReset}`,
+                        )} ${currencySymbol}/day (${(1000 * profit[algo]).toFixed(4)}mBTC/day) ${
+                          compared >= 0
+                            ? (compared === 0 ? '- no change' : fgGreen + '^') : fgRed + 'v'
+                            } ${
+                          compared !== 0
+                            ? (compared * currentPrice).toFixed(2) + currencySymbol + ' (' +
+                            (1000 * compared).toFixed(4) + ' mBTC)' :
+                            ('')}${ttyReset}`,
                         0,
                         cursorPos
                     );
@@ -453,7 +462,7 @@ const setupAlgo = function(key) {
             const now = new Date();
 
             currentlyRunning(
-                `\tStarted ${key}: ${fgCyan}${now.toLocaleTimeString()}${ttyReset}\n\tProfit: ${fgGreen}${(price *
+                `\tStarted ${key}: ${fgCyan}${now.toLocaleTimeString()}${ttyReset}\n\tProfit at start: ${fgGreen}${(price *
                     currentPrice
                 ).toFixed(2)}${currencySymbol}/day (${(price * 1000).toFixed(4)}mBTC/day)`,
                 0
@@ -539,6 +548,8 @@ const changeMiner = function retry() {
                         startChild[algo](price);
                     }
                 }
+            } else if (err === 'nochange') {
+              writeLine('No change in profit data (' + (new Date().toLocaleTimeString()) + ')...', 0, cursorPosAfterDetails + 7);
             } else {
                 writeLine('Error while fetching profit data:', 0, cursorPosAfterDetails + 8);
                 try {
