@@ -1,10 +1,12 @@
 {
     "miner": "macmini",
     "wallet": "3ABTHQuBacgADGywTmZnHdmG1PAcuk6RTg",
-    "mineAtLeast": 180000,
+    "server": "usa.nicehash.com",
+    "location": 1,
+    "mineAtLeast": 60000,
     "changeThreshold": 0.1,
     "changeThresholdBtc": 0.02,
-    "updateProfitMargins": 30000,
+    "updateProfitMargins": 15000,
     "currency": "EUR",
     "Equihash": {
       "speed": 330,

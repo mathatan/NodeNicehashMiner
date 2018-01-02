@@ -161,7 +161,7 @@ let previousProfits;
 
 const getProfitData = function(cb) {
     https
-        .get('https://api.nicehash.com/api?method=stats.global.current&location=0', resp => {
+        .get('https://api.nicehash.com/api?method=stats.global.current&location=' + config.location, resp => {
             let data = '';
 
             // A chunk of data has been recieved.
@@ -331,18 +331,18 @@ const { spawn } = require('child_process');
 
 const startChild = {};
 
-const getParams = function(conf) {
-    switch (conf.miner) {
+const getParams = function(algoConfig) {
+    switch (algoConfig.miner) {
         case 'ccminer':
             return [
                 'ccminer/ccminer',
                 [
                     '--retries=0',
-                    '--intensity=' + conf.intensity,
+                    '--intensity=' + algoConfig.intensity,
                     '--cpu-priority=5',
-                    '--algo=' + conf.algo,
+                    '--algo=' + algoConfig.algo,
                     '-o',
-                    'stratum+tcp://' + conf.server + '.eu.nicehash.com:' + conf.port,
+                    'stratum+tcp://' + algoConfig.server + '.' + config.server + ':' + algoConfig.port,
                     '-u',
                     config.wallet + '.' + config.miner,
                     '-p',
@@ -357,7 +357,7 @@ const getParams = function(conf) {
                     '-SP',
                     '2',
                     '-S',
-                    conf.server + '.eu.nicehash.com:' + conf.port,
+                    algoConfig.server + '.' + config.server + ':' + algoConfig.port,
                     '-O',
                     config.wallet + '.' + config.miner
                 ]
@@ -367,7 +367,7 @@ const getParams = function(conf) {
                 'eqminer/nheqminer',
                 [
                     '-l',
-                    conf.server + '.eu.nicehash.com:' + conf.port,
+                    algoConfig.server + '.' + config.server + ':' + algoConfig.port,
                     '-u',
                     config.wallet + '.' + config.miner,
                     '-cd',
@@ -437,6 +437,7 @@ const followChild = function(algo) {
         if (signal !== 'SIGINT' && signal !== 'SIGSEGV' && running) {
             writeLine(
                 `Child process terminated due to receipt of signal ${signal}; restart...`,
+                0,
                 cursorPosAfterDetails + 8
             );
 
@@ -451,9 +452,12 @@ const followChild = function(algo) {
     });
 };
 
+let algoPrice;
+
 const setupAlgo = function(key) {
-    startChild[key] = function(price) {
+    startChild[key] = function(_price) {
         if (!algoRunning[key]) {
+            const price = _price || algoPrice;
             _currentAlgoStr = '';
             algoDifficulty = '';
             hashSpeed = '';
@@ -461,12 +465,19 @@ const setupAlgo = function(key) {
 
             const now = new Date();
 
-            currentlyRunning(
-                `\tStarted ${key}: ${fgCyan}${now.toLocaleTimeString()}${ttyReset}\n\tProfit at start: ${fgGreen}${(price *
-                    currentPrice
-                ).toFixed(2)}${currencySymbol}/day (${(price * 1000).toFixed(4)}mBTC/day)`,
-                0
-            );
+            if (_price) {
+                currentlyRunning(
+                    `\tStarted ${key}: ${fgCyan}${now.toLocaleString()}${ttyReset}\n\tProfit at start: ${fgGreen}${(price *
+                        currentPrice
+                    ).toFixed(2)}${currencySymbol}/day (${(price * 1000).toFixed(4)}mBTC/day)`,
+                    0
+                );
+            } else {
+                currentlyRunning(
+                    `\t${fgRed}Issues when starting ${key}... (${now.toLocaleString()})`,
+                    0
+                );
+            }
             childAlgo = key;
             prevChild = key;
             const params = getParams(config[key]);
@@ -553,7 +564,7 @@ const changeMiner = function retry() {
             } else {
                 writeLine('Error while fetching profit data:', 0, cursorPosAfterDetails + 8);
                 try {
-                    writeLine(JSON.stringify(err), 0, cursorPosAfterDetails + 8, true);
+                    writeLine(JSON.stringify(err), 0, cursorPosAfterDetails + 9, true);
                 } catch (e) {}
             }
         });
@@ -598,12 +609,12 @@ const getBtcPrices = function retry() {
                     currencySymbol = values[config.currency || 'EUR'].symbol;
                 })
                 .on('error', err => {
-                    writeLine('Error: ' + err.message);
+                    writeLine('Error: ' + err.message, 0, cursorPosAfterDetails + 8);
                     setTimeout(retry, 30000);
                 });
         });
     } catch (e) {
-        writeLine('Error: ' + e);
+        writeLine('Error: ' + e, 0, cursorPosAfterDetails + 8);
         setTimeout(retry, 30000);
     }
 };
