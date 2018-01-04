@@ -14,7 +14,7 @@ let currentPrice = 0,
 
 let first = true;
 let cursorPos = 0,
-    cursorPosAfterDetails;
+    cursorPosAfterDetails = 5;
 
 const algoKeys = {};
 const _algoKeys = require('./nicehashAlgos.json');
@@ -104,7 +104,7 @@ const currentlyRunning = function(str) {
 
 let hashSpeed,
     algoDifficulty,
-    lastHash = new Date();
+    lastHash;
 
 const updateSpeed = function(speed, difficulty) {
     hashSpeed = speed || hashSpeed;
@@ -184,7 +184,7 @@ const getProfitData = function(cb) {
                         }
                     }
                 } catch (e) {
-                    cb(e);
+                    cb(resp.statusCode + ': ' + resp.statusMessage);
                     return;
                 }
 
@@ -322,7 +322,7 @@ const getProfitData = function(cb) {
             });
         })
         .on('error', err => {
-            writeLine('Error: ' + err.message);
+            writeLine('Error: ' + err.message, 0, cursorPosAfterDetails + 8);
             cb(err);
         });
 };
@@ -457,6 +457,7 @@ let algoPrice;
 const setupAlgo = function(key) {
     startChild[key] = function(_price) {
         if (!algoRunning[key]) {
+            lastHash = undefined;
             const price = _price || algoPrice;
             _currentAlgoStr = '';
             algoDifficulty = '';
@@ -515,7 +516,7 @@ let retryProfitCheckTo;
 const changeMiner = function retry() {
     const algoMineTimeCheck = Date.now() - lastChange > (config.mineAtLeast || 3 * 60 * 1000);
 
-    if (algoMineTimeCheck && Date.now() - lastHash.getTime() > 20000) {
+    if (algoMineTimeCheck && lastHash && (Date.now() - lastHash.getTime() > 20000) && (Date.now() - lastHash.getTime() < 10 * 60 * 1000)) {
         clearTimeout(retryProfitCheckTo);
         retryProfitCheckTo = setTimeout(retry, 1000);
         writeLine('Waiting for accepted share...', 0, cursorPosAfterDetails + 7);
