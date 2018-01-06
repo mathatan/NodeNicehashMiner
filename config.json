@@ -1,99 +1,148 @@
 {
     "miner": "macmini",
     "wallet": "3ABTHQuBacgADGywTmZnHdmG1PAcuk6RTg",
-    "server": "usa.nicehash.com",
-    "location": 1,
+    "server": "eu.nicehash.com",
+    "location": 0,
     "mineAtLeast": 60000,
     "changeThreshold": 0.1,
     "changeThresholdBtc": 0.02,
-    "updateProfitMargins": 15000,
+    "updateProfitMargins": 30000,
     "currency": "EUR",
-    "Equihash": {
-      "speed": 330,
-      "multiplier": 1,
-      "port": 3357,
-      "server": "equihash",
-      "intensity": "auto",
-      "algo": "neoscrypt",
-      "miner": "ccminer"
+    "miners" :{
+        "ccminer": {
+            "parameters": "--retries=0 --intensity=[intensity] --cpu-priority=5 --algo=[algorithm] -o stratum+tcp://[host].[server]:[port] -u [wallet].[miner] -p x",
+            "executable" : {
+                "darwin": "ccminer/ccminer",
+                "win32": "windows/bin/ccminer_tprurov/ccminer.exe"
+            },
+            "accepted": "[^a]* accepted: ([0-9.]+)\\/([0-9\\.]+) \\(diff ([0-9.]*)\\), ([0-9\\.]+) ([A-Z/a-z]*) ([a-z!]*)",
+            "difficulty": "[^S]*Stratum[^0-9\\.]*([0-9\\.]+) \\(([0-9\\.]*)\\)|[^S]*Stratum[^0-9\\.]*([0-9\\.]+)",
+            "block": "[^\\]]*] [A-Za-z0-9]* block ([0-9\\.]+), diff ([0-9\\.]+)",
+            "gpu": "[^G]*GPU #([0-9]): ([^,]*), ([0-9\\.]*) ([A-Za-z/]*)"
+        }
     },
-    "DaggerHashimoto" : {
-      "speed": 26,
-      "multiplier": 1000,
-      "port": 3353,
-      "server": "daggerhashimoto",
-      "miner": "ethminer"
-    },
-    "NeoScrypt": {
-      "speed": 860,
-      "multiplier": 1,
-      "port": 3341,
-      "server": "neoscrypt",
-      "intensity": 21,
-      "algo": "neoscrypt",
-      "miner": "ccminer"
-     },
-    "Lyra2REv2": {
-      "speed": 31.5,
-      "multiplier": 1,
-      "port": 3347,
-      "server": "lyra2rev2",
-      "intensity": 21,
-      "algo": "lyra2v2",
-      "miner": "ccminer"
-    },
-    "CryptoNight": {
-      "speed": 550,
-      "multiplier": 1,
-      "port": 3355,
-      "server": "cryptonight",
-      "intensity": "auto",
-      "algo": "cryptonight",
-      "miner": "ccminer"
-    },
-    "Blake2s": {
-      "speed": 3450,
-      "multiplier": 1,
-      "port": 3361,
-      "server": "blake2s",
-      "intensity": 28,
-      "algo": "blake2s",
-      "miner": "ccminer"
-    },
-    "Decred": {
-      "speed": 2470,
-      "multiplier": 1,
-      "port": 3360,
-      "server": "decred",
-      "intensity": 28,
-      "algo": "decred",
-      "miner": "ccminer"
-    },
-    "Skunk": {
-      "speed": 26.25,
-      "multiplier": 1000,
-      "port": 3362,
-      "server": "skunk",
-      "intensity": 21,
-      "algo": "skunk",
-      "miner": "ccminer"
-    },
-    "Lbry": {
-      "speed": 260,
-      "multiplier": 1,
-      "port": 3356,
-      "server": "lbry",
-      "intensity": 28,
-      "algo": "lbry",
-      "miner": "ccminer"
-    },
-    "Nist5": {
-      "speed": 39.5,
-      "multiplier": 1000,
-      "port": 3340,
-      "server": "nist5",
-      "intensity": 24,
-      "algo": "nist5",
-      "miner": "ccminer"
+    "algorithms": {
+        "Equihash": {
+            "speed": 330,
+            "multiplier": 1,
+            "port": 3357,
+            "server": "equihash",
+            "intensity": "auto",
+            "algo": "equihash",
+            "miner": "ccminer"
+        },
+        "DaggerHashimoto" : {
+            "speed": 26,
+            "multiplier": 1000,
+            "port": 3353,
+            "server": "daggerhashimoto",
+            "miner": "ethminer"
+        },
+        "Equihash" : {
+            "speed": 317,
+            "multiplier": 1,
+            "port": 3357,
+            "server": "equihash",
+            "miner": "nheqminer"
+        },
+        "NeoScrypt": {
+            "speed": 885,
+            "multiplier": 1,
+            "port": 3341,
+            "server": "neoscrypt",
+            "intensity": 21,
+            "algo": "neoscrypt",
+            "miner": "ccminer"
+        },
+        "Lyra2RE": {
+            "speed": 6850,
+            "multiplier": 1,
+            "port": 3342,
+            "server": "lyra2",
+            "intensity": 21,
+            "algo": "lyra2",
+            "miner": "ccminer"
+        },
+        "Lyra2REv2": {
+            "speed": 34,
+            "multiplier": 1,
+            "port": 3347,
+            "server": "lyra2rev2",
+            "intensity": 21,
+            "algo": "lyra2v2",
+            "miner": "ccminer"
+        },
+        "CryptoNight": {
+            "speed": 550,
+            "multiplier": 1,
+            "port": 3355,
+            "server": "cryptonight",
+            "intensity": "auto",
+            "algo": "cryptonight",
+            "miner": "ccminer"
+        },
+        "Blake2s": {
+            "speed": 3680,
+            "multiplier": 1,
+            "port": 3361,
+            "server": "blake2s",
+            "intensity": 28,
+            "algo": "blake2s",
+            "miner": "ccminer"
+        },
+        "Skunk": {
+            "speed": 26.5,
+            "multiplier": 1000,
+            "port": 3362,
+            "server": "skunk",
+            "intensity": 21,
+            "algo": "skunk",
+            "miner": "ccminer"
+        },
+        "Lbry": {
+            "speed": 265,
+            "multiplier": 1,
+            "port": 3356,
+            "server": "lbry",
+            "intensity": 28,
+            "algo": "lbry",
+            "miner": "ccminer"
+        },
+        "Nist5": {
+            "speed": 41.2,
+            "multiplier": 1000,
+            "port": 3340,
+            "server": "nist5",
+            "intensity": 24,
+            "algo": "nist5",
+            "miner": "ccminer"
+        },
+        "Qubit": {
+            "speed": 19.5,
+            "multiplier": 1,
+            "port": 3344,
+            "server": "qubit",
+            "intensity": 21,
+            "algo": "qubit",
+            "miner": "ccminer"
+        },
+        "Quark": {
+            "speed": 23.2,
+            "multiplier": 1,
+            "port": 3345,
+            "server": "quark",
+            "intensity": 21,
+            "algo": "quark",
+            "miner": "ccminer"
+        },
+        "Keccak": {
+            "speed": 750,
+            "multiplier": 1,
+            "port": 3338,
+            "server": "keccak",
+            "intensity": 29,
+            "algo": "keccak",
+            "miner": "ccminer"
+        }
     }
 }

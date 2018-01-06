@@ -1,6 +1,16 @@
 const https = require('https');
 const config = require('./config.json');
 
+if (process.argv[2]) {
+    const _minerConf = require('./' + process.argv[2] + '.json');
+
+    for (const key in _minerConf) {
+        if (_minerConf.hasOwnProperty(key)) {
+            config[key] = _minerConf[key];
+        }
+    }
+}
+
 let childProcess;
 let childAlgo;
 let prevChild;
@@ -9,7 +19,7 @@ let running = true;
 let killing = false;
 let lastChange = 0;
 
-let currentPrice = 0,
+let conversionRate = 0,
     currencySymbol = 'e';
 
 let first = true;
@@ -20,7 +30,7 @@ const algoKeys = {};
 const _algoKeys = require('./nicehashAlgos.json');
 
 for (const key in _algoKeys) {
-    if (config.hasOwnProperty(key)) {
+    if (config.algorithms.hasOwnProperty(key)) {
         algoKeys[key] = _algoKeys[key];
     }
 }
@@ -88,47 +98,132 @@ process.stdout.on('resize', () => {
 });
 
 writeLine('          *** NodeNicehashMiner by Markus Haverinen ***', 0, 0, true);
-writeLine(ttyDim + '     If you like it, please donate some mBTC for the trouble. :)', 0, 1);
 writeLine(
     ttyDim + '      BTC Donation address: ' + ttyReset + ttyUnderscore + '3CC35VEKMd861aWWSgGqPyRurc4JXCTpsX',
     0,
-    2
+    1
 );
 
-let _currentAlgoStr = '';
-const currentlyRunning = function(str) {
-    _currentAlgoStr = str || _currentAlgoStr;
-
-    writeLine(_currentAlgoStr, 0, cursorPosAfterDetails + 1);
+const getProfitString = profit => {
+    return `${(profit * conversionRate).toFixed(2)}${currencySymbol}/day (${(profit * 1000).toFixed(4)}mBTC/day)`;
 };
 
-let hashSpeed,
-    algoDifficulty,
-    lastHash;
+const osValue = data => {
+    const os = process.platform;
 
-const updateSpeed = function(speed, difficulty) {
-    hashSpeed = speed || hashSpeed;
-    algoDifficulty = difficulty || algoDifficulty;
-    if (speed) {
-        lastHash = new Date();
+    return typeof data === 'object' ? data[os] || data : data;
+};
+
+let currentAlgoStr = '',
+    currentAlgoName,
+    currentAlgoPrice = 0,
+    currentProfit = '',
+    hashSpeedObj = {},
+    hashSpeed,
+    algoDifficulty,
+    lastHash,
+    lastHashString,
+    lastBlock,
+    lastBlockString;
+
+const updateRunning = function(name, price) {
+    if (name) {
+        const now = new Date();
+
+        currentAlgoName = name;
+        currentAlgoStr = `\tStarted ${name}: ${fgWhite}${now.toLocaleString()}${ttyReset} with: ${fgGreen}${getProfitString(
+            price
+        )}`;
+    }
+
+    writeLine(currentAlgoStr || '', 0, cursorPosAfterDetails + 1);
+};
+
+const updateCurrentProfit = function(profit) {
+    if (profit) {
+        const now = new Date();
+
+        currentAlgoPrice = profit;
+        currentProfit = `\tCurrent profit: ${fgGreen}${getProfitString(
+            profit
+        )}${ttyReset} (${fgCyan}${now.toLocaleTimeString()}${ttyReset})`;
+    }
+
+    writeLine(currentProfit || '', 0, cursorPosAfterDetails + 2);
+};
+
+const updateSpeed = function(algo, miner, line, deviceId, deviceName, speed, unit) {
+    if (typeof deviceId !== 'undefined') {
+        hashSpeedObj[deviceId + deviceName] = {
+            device: deviceName + ' #' + deviceId,
+            speed: speed + ' ' + unit
+        };
+
+        const keys = Object.keys(hashSpeedObj).sort();
+
+        hashSpeed = '';
+        for (let i = 0, iLen = keys.length; i < iLen; i++) {
+            const obj = hashSpeedObj[keys[i]];
+
+            hashSpeed = (hashSpeed ? `${hashSpeed}, ` : '') + `${obj.device} ${fgWhite}${obj.speed}${ttyReset}`;
+        }
     }
 
     if (hashSpeed) {
-        writeLine(
-            `\tCurrent speed: ${fgWhite}${hashSpeed}${ttyReset}\n\tDifficulty: ${fgYellow}${algoDifficulty ||
-                'undefined'}${ttyReset}\n\tLast accepted share: ${fgCyan}${lastHash
-                ? lastHash.toLocaleTimeString()
-                : ''}`,
-            0,
-            cursorPosAfterDetails + 3
-        );
+        writeLine(`\tCurrent speed: ${hashSpeed}`, 0, cursorPosAfterDetails + 3);
+    } else {
+        writeLine('\tCurrent speed: Not yet detected', 0, cursorPosAfterDetails + 3);
+    }
+};
+
+const updateDifficulty = function(algo, miner, line, difficulty, difficulty2) {
+    algoDifficulty = difficulty ? difficulty + (difficulty2 ? ' (' + difficulty2 + ')' : '') : algoDifficulty;
+
+    if (algoDifficulty) {
+        writeLine(`\tDifficulty: ${fgYellow}${algoDifficulty || 'undefined'}`, 0, cursorPosAfterDetails + 4);
+    } else {
+        writeLine('\tDifficulty: Not yet detected}', 0, cursorPosAfterDetails + 4);
+    }
+};
+
+let prevAccepted = 0;
+
+const updateAccepted = function(algo, miner, line, accepted, total, diff, speed, unit) {
+    //, status
+    if (parseInt(accepted) > prevAccepted) {
+        lastHash = new Date();
+        prevAccepted = parseInt(accepted);
+    }
+
+    if (lastHash && prevAccepted === parseInt(accepted)) {
+        lastHashString = `${currentAlgoName} - ${fgCyan}${lastHash.toLocaleTimeString()}: ${ttyReset}${accepted}/${total}: ${fgWhite}${speed} ${unit}${ttyReset} with ${getProfitString(
+            currentAlgoPrice
+        )}`;
+    }
+
+    if (lastHashString) {
+        writeLine(`\tLast accepted: ${lastHashString}`, 0, cursorPosAfterDetails + 5);
+    } else {
+        writeLine('\tLast accepted: None yet', 0, cursorPosAfterDetails + 5);
+    }
+};
+
+const updateBlock = function(algo, miner, line, blockId, diff) {
+    // not working for what ever reason...
+    if (line) {
+        lastBlock = new Date();
+        lastBlockString = `${blockId}, diff ${diff} (${lastBlock.toLocaleTimeString()})`;
+    }
+
+    if (lastBlockString) {
+        writeLine(`\tLast block: ${lastBlockString}`, 0, cursorPosAfterDetails + 6);
     }
 };
 
 let log = '';
 const updateLog = function(str) {
-    const joinedStr = log + String(str);
-    const logLines = joinedStr.split('\n');
+    const joinedStr = log + String(str || '');
+    const logLines = joinedStr.trim().split('\n');
 
     let newLog = '';
     let lineLen = 0;
@@ -154,6 +249,16 @@ const updateLog = function(str) {
         cursorPosAfterDetails + 9,
         true
     );
+};
+
+const updateValues = function() {
+    updateRunning();
+    updateCurrentProfit();
+    updateSpeed();
+    updateDifficulty();
+    updateAccepted();
+    updateBlock();
+    updateLog();
 };
 
 const algoRunning = {};
@@ -197,38 +302,35 @@ const getProfitData = function(cb) {
 
                 Object.keys(algoKeys).map(key => {
                     profit[key] =
-                        config[key].speed * config[key].multiplier * parseFloat(items[key].price, 10) * multiplier;
+                        config.algorithms[key].speed *
+                        config.algorithms[key].multiplier *
+                        parseFloat(items[key].price, 10) *
+                        multiplier;
 
                     algomap[profit[key]] = key;
                 });
 
                 if (JSON.stringify(profit) === JSON.stringify(previousProfits)) {
-                  cb('nochange');
-                  return;
+                    cb('nochange');
+                    return;
                 }
 
                 const keys = Object.keys(algomap).sort(function(a, b) {
                     return parseFloat(b) - parseFloat(a);
                 });
 
-                writeLine('Status for algorithms at ' + (new Date().toLocaleTimeString()) + ':', 0, 4, true);
+                writeLine(`Mining in ${config.server} as ${config.wallet}.${config.miner}`, 0, 3);
+                writeLine('Status for algorithms at ' + new Date().toLocaleTimeString() + ':', 0, 4, true);
                 cursorPos = 5;
 
                 keys.map(key => {
                     const algo = algomap[key];
-                    const compared = previousProfits ? profit[algo] - previousProfits[algo]: 0;
+                    const compared = previousProfits ? profit[algo] - previousProfits[algo] : 0;
 
                     writeLine(
-                        `\t${algo}${algo.length < 8 ? '\t\t' : '\t'} ${(currentPrice * profit[algo]).toFixed(
-                            2
-                        )} ${currencySymbol}/day (${(1000 * profit[algo]).toFixed(4)}mBTC/day) ${
-                          compared >= 0
-                            ? (compared === 0 ? '- no change' : fgGreen + '^') : fgRed + 'v'
-                            } ${
-                          compared !== 0
-                            ? (compared * currentPrice).toFixed(2) + currencySymbol + ' (' +
-                            (1000 * compared).toFixed(4) + ' mBTC)' :
-                            ('')}${ttyReset}`,
+                        `\t${algo}${algo.length < 8 ? '\t\t' : '\t'} ${getProfitString(profit[algo])} ${compared >= 0
+                            ? compared === 0 ? '- no change' : fgGreen + '^'
+                            : fgRed + 'v'} ${compared !== 0 ? getProfitString(compared) : ''}${ttyReset}`,
                         0,
                         cursorPos
                     );
@@ -249,62 +351,30 @@ const getProfitData = function(cb) {
 
                     if (childAlgo) {
                         writeLine(
-                            `${childAlgo} is making ${(profit[childAlgo] * currentPrice).toFixed(
-                                2
-                            )} ${currencySymbol}/day (${(profit[childAlgo] * 1000).toFixed(
-                                4
-                            )}mBTC/day) and ${algo} is more profitable by ${fgRed}${(currentPrice * diff).toFixed(2) +
-                                currencySymbol}/day (${(1000 * diff).toFixed(4)}mBTC/day)`,
+                            `${childAlgo} is making ${getProfitString(
+                                profit[childAlgo]
+                            )} and ${algo} is more profitable by ${getProfitString(diff)}`,
                             0,
                             cursorPosAfterDetails
                         );
                     } else if (!first) {
-                        writeLine(
-                            algo +
-                                ' is more profitable by ' +
-                                (currentPrice * diff).toFixed(2) +
-                                currencySymbol +
-                                '/day (' +
-                                (1000 * diff).toFixed(4) +
-                                'mBTC/day)',
-                            0,
-                            cursorPosAfterDetails
-                        );
+                        writeLine(`${algo} is more profitable by ${getProfitString(diff)}`, 0, cursorPosAfterDetails);
                     } else {
-                        writeLine(
-                            `${algo} is most profitable by ${(currentPrice * diff).toFixed(
-                                2
-                            )} ${currencySymbol}/day (${(1000 * diff).toFixed(4)}mBTC/day)`,
-                            0,
-                            cursorPosAfterDetails
-                        );
+                        writeLine(`${algo} is most profitable by ${getProfitString(diff)}`, 0, cursorPosAfterDetails);
                     }
                 } else {
                     const diff = profit[algo] - profit[nextAlgo];
 
                     if (childAlgo) {
                         writeLine(
-                            `${childAlgo} is making ${(profit[childAlgo] * currentPrice).toFixed(
-                                2
-                            )} ${currencySymbol}/day (${(profit[childAlgo] * 1000).toFixed(
-                                4
-                            )}mBTC/day) and is the most profitable by ${fgGreen}${(currentPrice * diff).toFixed(2) +
-                                currencySymbol}/day (${(1000 * diff).toFixed(4)}mBTC/day)`,
+                            `${childAlgo} is making ${getProfitString(
+                                profit[childAlgo]
+                            )} and is the most profitable by ${fgGreen}${getProfitString(diff)}`,
                             0,
                             cursorPosAfterDetails
                         );
                     } else {
-                        writeLine(
-                            algo +
-                                ' is most profitable by ' +
-                                (currentPrice * diff).toFixed(2) +
-                                currencySymbol +
-                                '/day (' +
-                                (1000 * diff).toFixed(4) +
-                                'mBTC/day)',
-                            0,
-                            cursorPosAfterDetails
-                        );
+                        writeLine(`${algo} is most profitable by ${getProfitString(diff)}`, 0, cursorPosAfterDetails);
                     }
                 }
 
@@ -314,11 +384,14 @@ const getProfitData = function(cb) {
                 first = false;
                 previousProfits = profit;
 
-                currentlyRunning();
-                updateSpeed();
+                updateValues();
                 updateLog('');
 
                 cb(0, algo, profit[algo] - profit[childAlgo || nextAlgo], profit[algo]);
+
+                if (typeof previousProfits === 'undefined' || previousProfits[childAlgo] !== profit[childAlgo]) {
+                    updateCurrentProfit(profit[childAlgo || algo]);
+                }
             });
         })
         .on('error', err => {
@@ -331,106 +404,194 @@ const { spawn } = require('child_process');
 
 const startChild = {};
 
-const getParams = function(algoConfig) {
-    switch (algoConfig.miner) {
-        case 'ccminer':
-            return [
-                'ccminer/ccminer',
-                [
-                    '--retries=0',
-                    '--intensity=' + algoConfig.intensity,
-                    '--cpu-priority=5',
-                    '--algo=' + algoConfig.algo,
-                    '-o',
-                    'stratum+tcp://' + algoConfig.server + '.' + config.server + ':' + algoConfig.port,
-                    '-u',
-                    config.wallet + '.' + config.miner,
-                    '-p',
-                    'x'
-                ]
-            ];
-        case 'ethminer':
-            return [
-                'ethminer/ethminer',
-                [
-                    '-U',
-                    '-SP',
-                    '2',
-                    '-S',
-                    algoConfig.server + '.' + config.server + ':' + algoConfig.port,
-                    '-O',
-                    config.wallet + '.' + config.miner
-                ]
-            ];
-        case 'nheqminer':
-            return [
-                'eqminer/nheqminer',
-                [
-                    '-l',
-                    algoConfig.server + '.' + config.server + ':' + algoConfig.port,
-                    '-u',
-                    config.wallet + '.' + config.miner,
-                    '-cd',
-                    '0',
-                    '-cb',
-                    '32',
-                    '-ct',
-                    '256'
-                ]
-            ];
-        default:
-            return [];
+const getParams = function(algoConfig, deviceConfig = {}) {
+    if (config.miners.hasOwnProperty(algoConfig.miner)) {
+        const miner = config.miners[algoConfig.miner];
+
+        return [
+            osValue(miner.executable),
+            (osValue(miner.parameters) +
+                ' ' +
+                ((typeof deviceConfig.device !== 'undefined' ? osValue(miner.devices) : {})[deviceConfig.device] || '')
+            )
+                .replace('[algorithm]', algoConfig.server)
+                .replace('[host]', algoConfig.server)
+                .replace('[server]', config.server)
+                .replace('[port]', algoConfig.port)
+                .replace('[wallet]', config.wallet)
+                .replace('[miner]', config.miner)
+                .replace('[intensity]', algoConfig.intensity)
+                .replace('[cpu]', deviceConfig.cpu)
+                .replace('[gpuId]', deviceConfig.gpu)
+                .replace('[mem-clock]', algoConfig.gpuMemClock)
+                .replace('[gpu-clock]', algoConfig.gpuClock)
+                .replace('[power-limit]', algoConfig.powerLimit)
+                .replace('[temp-limit]', algoConfig.tempLimit)
+                .trim()
+                .split(' ')
+        ];
     }
+
+    return ['echo', ['Undefined miner ' + algoConfig.miner]];
+    // switch (algoConfig.miner) {
+    //     case 'ccminer':
+    //         return [
+    //             'ccminer/ccminer',
+    //             [
+    //                 '--retries=0',
+    //                 '--intensity=' + algoConfig.intensity,
+    //                 '--cpu-priority=5',
+    //                 '--algo=' + algoConfig.algo,
+    //                 '-o',
+    //                 'stratum+tcp://' + algoConfig.server + '.' + config.server + ':' + algoConfig.port,
+    //                 '-u',
+    //                 config.wallet + '.' + config.miner,
+    //                 '-p',
+    //                 'x'
+    //             ]
+    //         ];
+    //     case 'ethminer':
+    //         return [
+    //             'ethminer/ethminer',
+    //             [
+    //                 '-U',
+    //                 '-SP',
+    //                 '2',
+    //                 '-S',
+    //                 algoConfig.server + '.' + config.server + ':' + algoConfig.port,
+    //                 '-O',
+    //                 config.wallet + '.' + config.miner
+    //             ]
+    //         ];
+    //     case 'nheqminer':
+    //         return [
+    //             'eqminer/nheqminer',
+    //             [
+    //                 '-l',
+    //                 algoConfig.server + '.' + config.server + ':' + algoConfig.port,
+    //                 '-u',
+    //                 config.wallet + '.' + config.miner,
+    //                 '-cd',
+    //                 '0',
+    //                 '-cb',
+    //                 '32',
+    //                 '-ct',
+    //                 '256'
+    //             ]
+    //         ];
+    //     default:
+    //         return [];
+    // }
+};
+
+const matchLines = function(algo, data) {
+    const lines = String(data)
+        .trim()
+        .split('\n');
+
+    const miner = config.miners[config.algorithms[algo].miner];
+
+    const accepted = miner.accepted && new RegExp(osValue(miner.accepted) || '', 'gm');
+    const difficulty = miner.difficulty && new RegExp(osValue(miner.difficulty) || '', 'gm');
+    const block = miner.block && new RegExp(osValue(miner.block) || '', 'gm');
+    const gpu = miner.gpu && new RegExp(osValue(miner.gpu) || '', 'gm');
+    const cpu = miner.cpu && new RegExp(osValue(miner.cpu) || '', 'gm');
+
+    lines.map(line => {
+        if (accepted && accepted.test(line)) {
+            accepted.lastIndex = 0;
+            const values = accepted.exec(line);
+
+            updateAccepted(algo, miner, ...values);
+        }
+        if (difficulty && difficulty.test(line)) {
+            difficulty.lastIndex = 0;
+            const values = difficulty.exec(line);
+
+            updateDifficulty(algo, miner, ...values);
+        }
+        if (block && block.test(line)) {
+            block.lastIndex = 0;
+            const values = block.exec(line);
+
+            updateBlock(algo, miner, ...values);
+        }
+        if ((gpu && gpu.test(line)) || (cpu && cpu.test(line))) {
+            if (line.indexOf('Intensity') !== -1) {
+                return;
+            }
+
+            if (gpu) {
+                gpu.lastIndex = 0;
+            }
+            if (cpu) {
+                cpu.lastIndex = 0;
+            }
+
+            let values;
+
+            if (gpu.test(line)) {
+                gpu.lastIndex = 0;
+                values = gpu.exec(line);
+            } else {
+                values = cpu.exec(line);
+            }
+
+            // console.log('\n\n\n\n\n line:', line);
+            // console.log('gpu', gpu.test(line), gpu);
+            // console.log('values', JSON.stringify(values));
+
+            updateSpeed(algo, miner, ...values);
+        }
+    });
+
+    // lines.map(line => {
+    //     if (line.indexOf('accepted') !== -1) {
+    //         updateSpeed(
+    //             line
+    //             .split('), ')[1]
+    //             .split('yes')[0]
+    //             .trim()
+    //         );
+    //     } else if (line.indexOf('Stratum difficulty') !== -1) {
+    //         updateSpeed(undefined, line.split('Stratum difficulty set to ')[1].trim());
+    //     }
+    // });
 };
 
 const followChild = function(algo) {
     childProcess.stdout.on('data', data => {
         updateLog(data);
-        // console.log(`stdout: ${data}`);
-        if (algo === 'DaggerHashimoto') {
-            return;
-        }
 
-        const lines = String(data).split('\n');
-
-        lines.map(line => {
-            if (line.indexOf('accepted') !== -1) {
-                updateSpeed(
-                    line
-                        .split('), ')[1]
-                        .split('yes')[0]
-                        .trim()
-                );
-            } else if (line.indexOf('Stratum difficulty') !== -1) {
-                updateSpeed(undefined, line.split('Stratum difficulty set to ')[1].trim());
-            }
-        });
+        matchLines(algo, data);
     });
 
     childProcess.stderr.on('data', data => {
         updateLog(data);
-        // console.log(`stdout: ${data}`);
-        const lines = String(data).split('\n');
 
-        lines.map(line => {
-            switch (algo) {
-                case 'DaggerHashimoto':
-                    if (line.indexOf('Speed') !== -1) {
-                        updateSpeed(
-                            line
-                                .split('Speed ')[1]
-                                .split('gpu')[0]
-                                .trim()
-                        );
-                    } else if (line.indexOf('Stratum difficulty') !== -1) {
-                        updateSpeed(undefined, line.split('Stratum difficulty set to ')[1].trim());
-                    }
-                    break;
-                default:
-                    writeLine('\n' + line);
-                    break;
-            }
-        });
+        matchLines(algo, data);
+        // console.log(`stdout: ${data}`);
+        // const lines = String(data).split('\n');
+
+        // lines.map(line => {
+        //     switch (algo) {
+        //         case 'DaggerHashimoto':
+        //             if (line.indexOf('Speed') !== -1) {
+        //                 updateSpeed(
+        //                     line
+        //                         .split('Speed ')[1]
+        //                         .split('gpu')[0]
+        //                         .trim()
+        //                 );
+        //             } else if (line.indexOf('Stratum difficulty') !== -1) {
+        //                 updateSpeed(undefined, line.split('Stratum difficulty set to ')[1].trim());
+        //             }
+        //             break;
+        //         default:
+        //             writeLine('\n' + line);
+        //             break;
+        //     }
+        // });
     });
 
     childProcess.on('close', (code, signal) => {
@@ -452,42 +613,36 @@ const followChild = function(algo) {
     });
 };
 
-let algoPrice;
-
 const setupAlgo = function(key) {
-    startChild[key] = function(_price) {
+    startChild[key] = function(_price, device) {
         if (!algoRunning[key]) {
             lastHash = undefined;
-            const price = _price || algoPrice;
-            _currentAlgoStr = '';
+            const price = _price || currentAlgoPrice;
+
+            currentAlgoStr = '';
+            currentAlgoName = '';
+            currentProfit = '';
             algoDifficulty = '';
             hashSpeed = '';
+            hashSpeedObj = {};
+            lastHash = undefined;
+            lastHashString = '';
+            lastBlock = undefined;
+            lastBlockString = '';
             log = '';
 
-            const now = new Date();
-
             if (_price) {
-                currentlyRunning(
-                    `\tStarted ${key}: ${fgCyan}${now.toLocaleString()}${ttyReset}\n\tProfit at start: ${fgGreen}${(price *
-                        currentPrice
-                    ).toFixed(2)}${currencySymbol}/day (${(price * 1000).toFixed(4)}mBTC/day)`,
-                    0
-                );
-            } else {
-                currentlyRunning(
-                    `\t${fgRed}Issues when starting ${key}... (${now.toLocaleString()})`,
-                    0
-                );
+                updateRunning(key, price);
+                updateCurrentProfit(price);
             }
+
             childAlgo = key;
             prevChild = key;
-            const params = getParams(config[key]);
+            const params = getParams(config.algorithms[key], device);
 
             childProcess = spawn(params[0], params[1]);
             algoRunning[key] = true;
             followChild(key);
-        } else {
-            writeLine(`\nAlgorithm ${key} already running, skip run.`, 0, cursorPosAfterDetails + 1);
         }
     };
 };
@@ -516,7 +671,12 @@ let retryProfitCheckTo;
 const changeMiner = function retry() {
     const algoMineTimeCheck = Date.now() - lastChange > (config.mineAtLeast || 3 * 60 * 1000);
 
-    if (algoMineTimeCheck && lastHash && (Date.now() - lastHash.getTime() > 20000) && (Date.now() - lastHash.getTime() < 10 * 60 * 1000)) {
+    if (
+        algoMineTimeCheck &&
+        lastHash &&
+        Date.now() - lastHash.getTime() > 20000 &&
+        Date.now() - lastHash.getTime() < 10 * 60 * 1000
+    ) {
         clearTimeout(retryProfitCheckTo);
         retryProfitCheckTo = setTimeout(retry, 1000);
         writeLine('Waiting for accepted share...', 0, cursorPosAfterDetails + 7);
@@ -530,8 +690,8 @@ const changeMiner = function retry() {
             if (!err && running) {
                 let priceSwitch = false;
 
-                if (currentPrice !== 0) {
-                    priceSwitch = difference * currentPrice > (config.changeThreshold || 0.1);
+                if (conversionRate !== 0) {
+                    priceSwitch = difference * conversionRate > (config.changeThreshold || 0.1);
                 } else {
                     priceSwitch = difference * 1000 > (config.changeThresholdBtc || 0.02);
                 }
@@ -561,7 +721,11 @@ const changeMiner = function retry() {
                     }
                 }
             } else if (err === 'nochange') {
-              writeLine('No change in profit data (' + (new Date().toLocaleTimeString()) + ')...', 0, cursorPosAfterDetails + 7);
+                writeLine(
+                    'No change in profit data (' + new Date().toLocaleTimeString() + ')...',
+                    0,
+                    cursorPosAfterDetails + 7
+                );
             } else {
                 writeLine('Error while fetching profit data:', 0, cursorPosAfterDetails + 8);
                 try {
@@ -606,7 +770,7 @@ const getBtcPrices = function retry() {
                         return;
                     }
 
-                    currentPrice = values[config.currency || 'EUR']['15m'];
+                    conversionRate = values[config.currency || 'EUR']['15m'];
                     currencySymbol = values[config.currency || 'EUR'].symbol;
                 })
                 .on('error', err => {
