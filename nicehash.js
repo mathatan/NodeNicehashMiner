@@ -176,13 +176,15 @@ const updateSpeed = function(algo, miner, line, deviceId, deviceName, speed, uni
     }
 };
 
-const updateDifficulty = function(algo, miner, line, difficulty, difficulty2) {
-    algoDifficulty = difficulty ? difficulty + (difficulty2 ? ' (' + difficulty2 + ')' : '') : algoDifficulty;
+const updateDifficulty = function(algo, miner, line, difficulty, difficulty2, difficulty3) {
+    if (difficulty || difficulty3) {
+        algoDifficulty = difficulty3 ? difficulty3 : difficulty + difficulty2;
+    }
 
     if (algoDifficulty) {
         writeLine(`\tDifficulty: ${fgYellow}${algoDifficulty || 'undefined'}`, 0, cursorPosAfterDetails + 4);
     } else {
-        writeLine('\tDifficulty: Not yet detected}', 0, cursorPosAfterDetails + 4);
+        writeLine('\tDifficulty: Not yet detected', 0, cursorPosAfterDetails + 4);
     }
 };
 
@@ -382,7 +384,6 @@ const getProfitData = function(cb) {
                 cursorPos++;
 
                 first = false;
-                previousProfits = profit;
 
                 updateValues();
                 updateLog('');
@@ -392,6 +393,8 @@ const getProfitData = function(cb) {
                 if (typeof previousProfits === 'undefined' || previousProfits[childAlgo] !== profit[childAlgo]) {
                     updateCurrentProfit(profit[childAlgo || algo]);
                 }
+
+                previousProfits = profit;
             });
         })
         .on('error', err => {
@@ -509,12 +512,14 @@ const matchLines = function(algo, data) {
             const values = difficulty.exec(line);
 
             updateDifficulty(algo, miner, ...values);
+            writeLine('difficulty detected: ' + JSON.stringify(values), 0, 0);
         }
         if (block && block.test(line)) {
             block.lastIndex = 0;
             const values = block.exec(line);
 
             updateBlock(algo, miner, ...values);
+            writeLine('block detected', 0, 1);
         }
         if ((gpu && gpu.test(line)) || (cpu && cpu.test(line))) {
             if (line.indexOf('Intensity') !== -1) {
@@ -630,6 +635,7 @@ const setupAlgo = function(key) {
             lastBlock = undefined;
             lastBlockString = '';
             log = '';
+            prevAccepted = 0;
 
             if (_price) {
                 updateRunning(key, price);
