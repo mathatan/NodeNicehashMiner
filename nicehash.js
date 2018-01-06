@@ -178,7 +178,7 @@ const updateSpeed = function(algo, miner, line, deviceId, deviceName, speed, uni
 
 const updateDifficulty = function(algo, miner, line, difficulty, difficulty2, difficulty3) {
     if (difficulty || difficulty3) {
-        algoDifficulty = difficulty3 ? difficulty3 : difficulty + difficulty2;
+        algoDifficulty = difficulty3 ? difficulty3 : difficulty + ' ' + difficulty2;
     }
 
     if (algoDifficulty) {
