@@ -13,7 +13,7 @@ You need a working version of Node.js v8+ and the miners but there are no other 
 
 ## Usage
 
-Within your terminal start the script via `node nicehash.js` within the directory of the script if you have configured everything properly you should be good to go.
+Within your terminal start the script via `$ node nicehash.js miner` within the directory of the script if you have configured everything properly you should be good to go.
 
 ## TODO
 
