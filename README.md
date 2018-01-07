@@ -13,7 +13,24 @@ You need a working version of Node.js v8+ and the miners but there are no other 
 
 ## Usage
 
-Within your terminal start the script via `node nicehashminer.js` if you have configured everything properly you should be good to go.
+Within your terminal start the script via `node nicehash.js` within the directory of the script if you have configured everything properly you should be good to go.
+
+## TODO
+
+This script is anything but finished. It's not really even on a beta yet, so use at your own discretion. Here's few things that still need doing:
+
+ - Proper support for miners and parse of responses
+ - Benchmarking within script, currently profitability calculation is limited to user inputed values
+ - Detection of available GPU's and CPU's
+ - Support for CPU mining, and also support for mining per individual GPU
+ - Support for MiningpoolHub (somekind of future estimation for delayed transactions for auto trading would be ideal, but probably impossible)
+ - Download and automatic updates for miners (where bins available and license allows it, this will likely never happen for MacOs, sorry...)
+ - Configrations for different miner instances. E.g. excavator, sgminer, xmr-stak, etc.
+ - Separation of concerns, split the script file into multiple smaller files
+ - Plugin architecture for supporting e.g. Ifttt
+ - Multi-instance support within network
+ - Logs and profitability history
+ - Profitability estimation by averagely found hashes (if possible)
 
 ## Feedback
 
