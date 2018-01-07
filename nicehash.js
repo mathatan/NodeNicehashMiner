@@ -589,6 +589,7 @@ const getProfitData = function(cb) {
 
     httpFetch('https://api.nicehash.com/api?method=stats.global.current&location=' + config.location, (err, results) => {
         if (err) {
+            fetchingData = false;
             cb(err);
             return;
         }
