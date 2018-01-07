@@ -78,6 +78,6 @@ LIBCURL_CFLAGS=-I/usr/local/opt/curl/include
 LIBCURL_LIBS=-L/usr/local/opt/curl/lib
 ```
 
-After this you should be able to compilce ccminer within MacOS.
+After this you should be able to compile ccminer within MacOS.
 
 Start compile with `./build.sh` in the repository folder.
