@@ -826,6 +826,10 @@ setInterval(getBtcPrices, 15 * 60 * 1000);
 
 const minerLoop = function () {
     getProfitData((err, profits) => {
+        if (err) {
+            return;
+        }
+
         var change = renderProfitData(err, profits);
         if (change.length > 0) {
             switchAlgo(...change);
