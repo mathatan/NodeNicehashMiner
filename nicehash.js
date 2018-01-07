@@ -28,12 +28,18 @@ let cursorPos = 0,
 
 const algoKeys = {};
 const _algoKeys = require('./nicehashAlgos.json');
+const algoMap = [];
 
 for (const key in _algoKeys) {
     if (config.algorithms.hasOwnProperty(key)) {
         algoKeys[key] = _algoKeys[key];
     }
+    if (_algoKeys.hasOwnProperty(key)) {
+        algoMap[_algoKeys[key]] = key;
+    }
 }
+
+const profitCalcMutliplier = 24 * 60 * 60 / 100000000000;
 
 // Some ansi coloring strings
 
@@ -121,6 +127,7 @@ let currentAlgoStr = '',
     hashSpeedObj = {},
     hashSpeed,
     algoDifficulty,
+    algoJob,
     lastHash,
     lastHashString,
     lastBlock,
@@ -153,7 +160,7 @@ const updateCurrentProfit = function(profit) {
 };
 
 const updateSpeed = function(algo, miner, line, deviceId, deviceName, speed, unit) {
-    if (typeof deviceId !== 'undefined') {
+    if (typeof deviceId !== 'undefined' && line.indexOf('GPU') !== -1 ) {
         hashSpeedObj[deviceId + deviceName] = {
             device: deviceName + ' #' + deviceId,
             speed: speed + ' ' + unit
@@ -167,6 +174,14 @@ const updateSpeed = function(algo, miner, line, deviceId, deviceName, speed, uni
 
             hashSpeed = (hashSpeed ? `${hashSpeed}, ` : '') + `${obj.device} ${fgWhite}${obj.speed}${ttyReset}`;
         }
+    } else if (typeof deviceId !== 'undefined'){
+        const speed1 = deviceId,
+            unit1 = deviceName,
+            speed2 = speed,
+            unit2 = unit;
+
+        hashSpeed = '';
+        hashSpeed = `${fgWhite}${speed2} ${unit2}${ttyReset} (${fgWhite}${speed1} ${unit1}${ttyReset})`;
     }
 
     if (hashSpeed) {
@@ -176,37 +191,48 @@ const updateSpeed = function(algo, miner, line, deviceId, deviceName, speed, uni
     }
 };
 
+let prevAccepted = 0, totalAccepted = 0;
+
+const updateAccepted = function(algo, miner, line, accepted, _total, diff, speed, unit) {
+    //, status
+    let total;
+
+    if (typeof line !== 'undefined') {
+        if (parseInt(accepted) > prevAccepted) {
+            lastHash = new Date();
+            prevAccepted = parseInt(accepted);
+
+            totalAccepted++;
+            total = _total || totalAccepted;
+        }
+    }
+
+    if (lastHash && prevAccepted === parseInt(accepted)) {
+        if (typeof diff !== 'undefined') {
+            lastHashString = `${currentAlgoName} - ${fgCyan}${lastHash.toLocaleTimeString()}: ${ttyReset}${accepted}/${total}: ${fgWhite}${speed} ${unit}${ttyReset} with ${getProfitString(
+                currentAlgoPrice
+            )}`;
+        } else {
+            lastHashString = `${currentAlgoName} - ${fgCyan}${lastHash.toLocaleTimeString()}: ${ttyReset}${accepted}/${total}${ttyReset} with ${getProfitString(
+                currentAlgoPrice
+            )}`;
+        }
+    }
+
+    if (lastHashString) {
+        writeLine(`\tLast accepted: ${lastHashString}`, 0, cursorPosAfterDetails + 4);
+    } else {
+        writeLine('\tLast accepted: None yet', 0, cursorPosAfterDetails + 4);
+    }
+};
+
 const updateDifficulty = function(algo, miner, line, difficulty, difficulty2, difficulty3) {
     if (difficulty || difficulty3) {
         algoDifficulty = difficulty3 ? difficulty3 : difficulty + ' ' + difficulty2;
     }
 
     if (algoDifficulty) {
-        writeLine(`\tDifficulty: ${fgYellow}${algoDifficulty || 'undefined'}`, 0, cursorPosAfterDetails + 4);
-    } else {
-        writeLine('\tDifficulty: Not yet detected', 0, cursorPosAfterDetails + 4);
-    }
-};
-
-let prevAccepted = 0;
-
-const updateAccepted = function(algo, miner, line, accepted, total, diff, speed, unit) {
-    //, status
-    if (parseInt(accepted) > prevAccepted) {
-        lastHash = new Date();
-        prevAccepted = parseInt(accepted);
-    }
-
-    if (lastHash && prevAccepted === parseInt(accepted)) {
-        lastHashString = `${currentAlgoName} - ${fgCyan}${lastHash.toLocaleTimeString()}: ${ttyReset}${accepted}/${total}: ${fgWhite}${speed} ${unit}${ttyReset} with ${getProfitString(
-            currentAlgoPrice
-        )}`;
-    }
-
-    if (lastHashString) {
-        writeLine(`\tLast accepted: ${lastHashString}`, 0, cursorPosAfterDetails + 5);
-    } else {
-        writeLine('\tLast accepted: None yet', 0, cursorPosAfterDetails + 5);
+        writeLine(`\tDifficulty: ${fgYellow}${algoDifficulty || 'undefined'}`, 0, cursorPosAfterDetails + 5);
     }
 };
 
@@ -266,141 +292,332 @@ const updateValues = function() {
 const algoRunning = {};
 let previousProfits;
 
-const getProfitData = function(cb) {
-    https
-        .get('https://api.nicehash.com/api?method=stats.global.current&location=' + config.location, resp => {
-            let data = '';
+const httpFetch = function (url, cb) {
+    https.get(url, resp => {
+        let data = '';
 
-            // A chunk of data has been recieved.
-            resp.on('data', chunk => {
-                data = data + chunk;
-            });
+        resp.on('data', chunk => {
+            data = data + chunk;
+        });
 
-            // The whole response has been received. Print out the result.
-            resp.on('end', () => {
-                let values;
+        resp.on('end', () => {
+            let result;
 
-                const items = {};
+            try {
+                result = JSON.parse(data);
+            } catch (e) {
+                cb(resp.statusCode + ': ' + resp.statusMessage);
+                return;
+            }
 
-                try {
-                    values = JSON.parse(data);
-
-                    for (const key in algoKeys) {
-                        if (algoKeys.hasOwnProperty(key)) {
-                            items[key] = values.result.stats[algoKeys[key]];
-                        }
-                    }
-                } catch (e) {
-                    cb(resp.statusCode + ': ' + resp.statusMessage);
-                    return;
-                }
-
-                const multiplier = 24 * 60 * 60 / 100000000000;
-
-                //console.log(values.result.stats);
-
-                const profit = {};
-                const algomap = {};
-
-                Object.keys(algoKeys).map(key => {
-                    profit[key] =
-                        config.algorithms[key].speed *
-                        config.algorithms[key].multiplier *
-                        parseFloat(items[key].price, 10) *
-                        multiplier;
-
-                    algomap[profit[key]] = key;
-                });
-
-                if (JSON.stringify(profit) === JSON.stringify(previousProfits)) {
-                    cb('nochange');
-                    return;
-                }
-
-                const keys = Object.keys(algomap).sort(function(a, b) {
-                    return parseFloat(b) - parseFloat(a);
-                });
-
-                writeLine(`Mining in ${config.server} as ${config.wallet}.${config.miner}`, 0, 3);
-                writeLine('Status for algorithms at ' + new Date().toLocaleTimeString() + ':', 0, 4, true);
-                cursorPos = 5;
-
-                keys.map(key => {
-                    const algo = algomap[key];
-                    const compared = previousProfits ? profit[algo] - previousProfits[algo] : 0;
-
-                    writeLine(
-                        `\t${algo}${algo.length < 8 ? '\t\t' : '\t'} ${getProfitString(profit[algo])} ${compared >= 0
-                            ? compared === 0 ? '- no change' : fgGreen + '^'
-                            : fgRed + 'v'} ${compared !== 0 ? getProfitString(compared) : ''}${ttyReset}`,
-                        0,
-                        cursorPos
-                    );
-                    cursorPos++;
-                });
-
-                cursorPos++;
-
-                cursorPosAfterDetails = cursorPos;
-
-                // console.log(keys, profit[keys[0]], profit[keys[0]] - profit[childAlgo || keys[0]]);
-
-                const algo = algomap[keys[0]],
-                    nextAlgo = algomap[keys[1]];
-
-                if (algo !== childAlgo) {
-                    const diff = profit[algo] - profit[childAlgo || nextAlgo];
-
-                    if (childAlgo) {
-                        writeLine(
-                            `${childAlgo} is making ${getProfitString(
-                                profit[childAlgo]
-                            )} and ${algo} is more profitable by ${getProfitString(diff)}`,
-                            0,
-                            cursorPosAfterDetails
-                        );
-                    } else if (!first) {
-                        writeLine(`${algo} is more profitable by ${getProfitString(diff)}`, 0, cursorPosAfterDetails);
-                    } else {
-                        writeLine(`${algo} is most profitable by ${getProfitString(diff)}`, 0, cursorPosAfterDetails);
-                    }
-                } else {
-                    const diff = profit[algo] - profit[nextAlgo];
-
-                    if (childAlgo) {
-                        writeLine(
-                            `${childAlgo} is making ${getProfitString(
-                                profit[childAlgo]
-                            )} and is the most profitable by ${fgGreen}${getProfitString(diff)}`,
-                            0,
-                            cursorPosAfterDetails
-                        );
-                    } else {
-                        writeLine(`${algo} is most profitable by ${getProfitString(diff)}`, 0, cursorPosAfterDetails);
-                    }
-                }
-
-                writeLine('\n');
-                cursorPos++;
-
-                first = false;
-
-                updateValues();
-                updateLog('');
-
-                cb(0, algo, profit[algo] - profit[childAlgo || nextAlgo], profit[algo]);
-
-                if (typeof previousProfits === 'undefined' || previousProfits[childAlgo] !== profit[childAlgo]) {
-                    updateCurrentProfit(profit[childAlgo || algo]);
-                }
-
-                previousProfits = profit;
-            });
-        })
-        .on('error', err => {
+            cb(undefined, result);
+        }).on('error', err => {
             writeLine('Error: ' + err.message, 0, cursorPosAfterDetails + 8);
             cb(err);
         });
+    });
+}
+
+let retryProfitCheckTo;
+
+const switchAlgo = function _retry(algo, previous) {
+    const retry = () => { _retry(algo, previous); };
+    const algoMineTimeCheck = Date.now() - lastChange > (config.mineAtLeast || 3 * 60 * 1000);
+    const force = algo.profit > previous.profit * 1.5;
+
+    if (
+        !force &&
+        algoMineTimeCheck &&
+        lastHash &&
+        Date.now() - lastHash.getTime() > 20000 &&
+        Date.now() - lastHash.getTime() < 10 * 60 * 1000
+    ) {
+        clearTimeout(retryProfitCheckTo);
+        retryProfitCheckTo = setTimeout(retry, 1000);
+        writeLine('Waiting for accepted share...', 0, cursorPosAfterDetails + 7);
+        return;
+    }
+
+    if (running && !killing && (algoMineTimeCheck || force)) {
+        let priceSwitch = false;
+        const difference = algo.profit - previous.profit;
+
+        if (conversionRate !== 0) {
+            priceSwitch = difference * conversionRate > (config.changeThreshold || 0.1);
+        } else {
+            priceSwitch = difference * 1000 > (config.changeThresholdBtc || 0.02);
+        }
+        // console.log('Run with', algo, (difference * 1000).toFixed(4));
+        if ((childAlgo !== algo.algo && priceSwitch) || typeof childAlgo === 'undefined') {
+            if (typeof childAlgo !== 'undefined' && childProcess) {
+                writeLine(
+                    'Kill child ' + childAlgo + ' before starting new...\n',
+                    0,
+                    cursorPosAfterDetails + 8
+                );
+                running = false;
+                killChild(function(code, signal) {
+                    try {
+                        writeLine('Child killed: ' + String(signal), 0, cursorPosAfterDetails + 8);
+                    } catch (e) {
+                        writeLine('Child killed', 0, cursorPosAfterDetails + 8);
+                    }
+
+                    lastChange = Date.now();
+                    startChild[algo.algo](algo.profit);
+                    running = true;
+                }, true);
+            } else {
+                lastChange = Date.now();
+                startChild[algo.algo](algo.profit);
+            }
+        }
+    } else if (!algoMineTimeCheck) {
+        const left = (config.mineAtLeast || 3 * 60 * 1000) - (Date.now() - lastChange);
+        const min = Math.floor((left - left % 60000) / 60000);
+        const sec = Math.round((left % 60000) / 1000);
+
+        writeLine(
+            `${childAlgo} change cool off: ${min ? min + ' min' : ''} ${sec ? sec + ' s' : ''}`,
+            0,
+            cursorPosAfterDetails + 7
+        );
+        if (typeof to === 'undefined') {
+            retryProfitCheckTo = setTimeout(retry, left + 100);
+        }
+    }
+};
+
+const profitHistory = {};
+
+const renderProfitData = function (err, profit) {
+    if (err === 'in-progress') {
+        return;
+    } else if (err === 'nochange') {
+        writeLine(
+            'No change in profit data (' + new Date().toLocaleTimeString() + ')...',
+            0,
+            cursorPosAfterDetails + 7
+        );
+        return;
+    } else if (typeof err !== 'undefined') {
+        writeLine('Error while fetching profit data:', 0, cursorPosAfterDetails + 8);
+        try {
+            writeLine(JSON.stringify(err), 0, cursorPosAfterDetails + 9, true);
+        } catch (e) {}
+        return;
+    }
+
+    writeLine(`Mining in ${config.server} as ${config.wallet}.${config.miner}`, 0, 3);
+    writeLine('Status for algorithms at ' + new Date().toLocaleTimeString() + ':', 0, 4, true);
+    cursorPos = 5;
+
+    const profitItems = {}, previousProfitItems = {};
+    profit.map(profitItem => {
+        profitHistory[profitItem.algo] = profitHistory[profitItem.algo] || [];
+        const algoHistory = profitHistory[profitItem.algo];
+        if (algoHistory.length === 0 || algoHistory[algoHistory.length - 1].profit !== profitItem.profit) {
+            profitHistory[profitItem.algo].push(profitItem);
+        }
+    });
+
+    profit.map(profitItem => {
+        const history = profitHistory[profitItem.algo];
+        const compared = (history.length < 2) ? (0) : (history[history.length - 1].profit - history[history.length - 2].profit);
+
+        writeLine(
+            `\t${profitItem.algo}${profitItem.algo.length < 8 ? '\t\t' : '\t'} ${getProfitString(profitItem.profit)
+                } ${history[history.length - 1].time < (Date.now() - 10000) ? (ttyDim) : ('')}${compared >= 0
+                            ? compared === 0 ? '- no change' : fgGreen + '^'
+                    : fgRed + 'v'} ${compared !== 0 ? getProfitString(compared) : ''}${ttyReset}`,
+            0,
+            cursorPos
+        );
+        cursorPos++;
+    });
+
+    cursorPos++;
+
+    cursorPosAfterDetails = cursorPos;
+
+    const algo = profit[0],
+        nextAlgo = profit[1];
+
+    const curAlgo = (childAlgo) ? (profitHistory[childAlgo][profitHistory[childAlgo].length - 1]) : nextAlgo;
+    const diff = algo.profit - ((curAlgo.algo === algo.algo) ? (nextAlgo.profit) : (curAlgo.profit));
+
+    if (algo.algo !== childAlgo) {
+        if (childAlgo) {
+            writeLine(
+                `${childAlgo} is making ${getProfitString(
+                    curAlgo.profit
+                )} and ${algo.algo} is more profitable by ${getProfitString(diff)}`,
+                0,
+                cursorPosAfterDetails
+            );
+        } else if (!first) {
+            writeLine(`${algo.algo} is more profitable by ${getProfitString(diff)}`, 0, cursorPosAfterDetails);
+        } else {
+            writeLine(`${algo.algo} is most profitable by ${getProfitString(diff)}`, 0, cursorPosAfterDetails);
+        }
+    } else {
+        if (childAlgo) {
+            writeLine(
+                `${childAlgo} is making ${getProfitString(
+                    curAlgo.profit
+                )} and is the most profitable by ${fgGreen}${getProfitString(diff)}`,
+                0,
+                cursorPosAfterDetails
+            );
+        } else {
+            writeLine(`${algo.algo} is most profitable by ${getProfitString(diff)}`, 0, cursorPosAfterDetails);
+        }
+    }
+
+    cursorPos++;
+
+    first = false;
+
+    updateValues();
+    updateLog('');
+
+    const ret = [];
+
+    if (typeof previousProfits === 'undefined' || curAlgo.algo !== profit[0].algo) {
+        // switchAlgo(algo, curAlgo);
+        ret.push(algo);
+        ret.push(curAlgo);
+    }
+
+    // cb(0, algo, profit[algo] - profit[childAlgo || nextAlgo], profit[algo]);
+
+    const childHistory = childAlgo && profitHistory[childAlgo]
+    if (typeof previousProfits === 'undefined' || childHistory && childHistory[childHistory.length - 1].time > (Date.now() - 10000)) {
+        updateCurrentProfit(childHistory && childHistory[childHistory.length - 1].profit || algo.profit);
+    }
+
+    return ret;
+}
+
+let fetchingData = false;
+
+const getProfitData = function(cb) {
+    if (fetchingData) {
+        cb('in-progress');
+        return;
+    }
+    fetchingData = true;
+
+    let topCount = 5, waiting = 0;
+
+    const profit = [];
+
+    const allDone = () => {
+        profit.sort((a, b) => b.profit - a.profit);
+
+        fetchingData = false;
+
+        if (JSON.stringify(profit) === JSON.stringify(previousProfits)) {
+            cb('nochange');
+            return;
+        }
+
+        cb(undefined, profit);
+
+        previousProfits = profit;
+    };
+
+    const hashprofit = function (algo, price) {
+        return parseFloat(price) * config.algorithms[algo].multiplier * config.algorithms[algo].speed *
+                 profitCalcMutliplier;
+    }
+
+    const _handleAlgo = function retry(profitItem) {
+        const url = 'https://api.nicehash.com/api?method=orders.get&location=' + config.location + '&algo=' + profitItem.id;
+
+        httpFetch(url, (err, results) => {
+            if (err) {
+                setTimeout(() => { retry(profitItem); }, 5000);
+                return;
+            }
+
+            waiting--;
+
+            let count = 0, avgSum = 0, avg, unlimited = 0, most;
+
+            results.result.orders
+                .sort((a, b) => parseFloat(b.workers) - parseFloat(a.workers))
+                .map(order => {
+                    if (order.alive && order.workers > 0) {
+                        avgSum += parseFloat(order.limit_speed) * parseFloat(order.price);
+                        count += parseFloat(order.limit_speed);
+
+                        if (!unlimited && parseFloat(order.limit_speed) === 0) {
+                            unlimited = order.price;
+                        }
+
+                        if (!most && parseFloat(order.limit_speed) > 0 && parseFloat(order.limit_speed) > 1.2 * parseFloat(order.accepted_speed)) {
+                            most = parseFloat(order.price);
+                        }
+                    }
+                });
+
+            most = (most) ? hashprofit(profitItem.algo, most) : (profitItem.protoProfit);
+            unlimited = hashprofit(profitItem.algo, unlimited);
+
+            avg = hashprofit(profitItem.algo, avgSum / count);
+
+            profitItem.balancedProfit = (unlimited > Math.max(most, avg, profitItem.protoProfit) ? unlimited : Math.min(most, profitItem.protoProfit, avg));
+
+            profitItem.profit = (profitItem.balancedProfit + profitItem.protoProfit) / 2 ;
+
+            profitItem.time = Date.now();
+
+            profit.push(profitItem);
+
+            if (waiting === 0) {
+                allDone();
+            }
+        });
+    };
+
+    const handleAlgo = (algo, count) => {
+        setTimeout(() => {
+            _handleAlgo(algo);
+        }, (count + 1) * 150);
+    }
+
+    httpFetch('https://api.nicehash.com/api?method=stats.global.current&location=' + config.location, (err, results) => {
+        if (err) {
+            cb(err);
+            return;
+        }
+
+        const keys = Object.keys(algoKeys);
+
+        const profit = results.result.stats.map(algo => {
+
+            if (keys.indexOf(algoMap[algo.algo]) === -1) {
+                return;
+            }
+
+            key = algoMap[algo.algo];
+
+            return {
+                protoProfit: hashprofit(key, algo.price),
+                algo: key,
+                id: algo.algo,
+                speed: parseFloat(algo.speed)
+            }
+        }).filter((item) => typeof item !== 'undefined');
+        
+        profit.sort((a, b) => b.protoProfit - a.protoProfit);
+
+        for (let i = 0; i < topCount; i++) {
+            waiting++;
+            handleAlgo(profit[i], i);
+        }
+    });
 };
 
 const { spawn } = require('child_process');
@@ -436,55 +653,6 @@ const getParams = function(algoConfig, deviceConfig = {}) {
     }
 
     return ['echo', ['Undefined miner ' + algoConfig.miner]];
-    // switch (algoConfig.miner) {
-    //     case 'ccminer':
-    //         return [
-    //             'ccminer/ccminer',
-    //             [
-    //                 '--retries=0',
-    //                 '--intensity=' + algoConfig.intensity,
-    //                 '--cpu-priority=5',
-    //                 '--algo=' + algoConfig.algo,
-    //                 '-o',
-    //                 'stratum+tcp://' + algoConfig.server + '.' + config.server + ':' + algoConfig.port,
-    //                 '-u',
-    //                 config.wallet + '.' + config.miner,
-    //                 '-p',
-    //                 'x'
-    //             ]
-    //         ];
-    //     case 'ethminer':
-    //         return [
-    //             'ethminer/ethminer',
-    //             [
-    //                 '-U',
-    //                 '-SP',
-    //                 '2',
-    //                 '-S',
-    //                 algoConfig.server + '.' + config.server + ':' + algoConfig.port,
-    //                 '-O',
-    //                 config.wallet + '.' + config.miner
-    //             ]
-    //         ];
-    //     case 'nheqminer':
-    //         return [
-    //             'eqminer/nheqminer',
-    //             [
-    //                 '-l',
-    //                 algoConfig.server + '.' + config.server + ':' + algoConfig.port,
-    //                 '-u',
-    //                 config.wallet + '.' + config.miner,
-    //                 '-cd',
-    //                 '0',
-    //                 '-cb',
-    //                 '32',
-    //                 '-ct',
-    //                 '256'
-    //             ]
-    //         ];
-    //     default:
-    //         return [];
-    // }
 };
 
 const matchLines = function(algo, data) {
@@ -512,7 +680,7 @@ const matchLines = function(algo, data) {
             const values = difficulty.exec(line);
 
             updateDifficulty(algo, miner, ...values);
-            writeLine('difficulty detected: ' + JSON.stringify(values), 0, 0);
+            // writeLine('difficulty detected: ' + JSON.stringify(values), 0, 0);
         }
         if (block && block.test(line)) {
             block.lastIndex = 0;
@@ -549,19 +717,6 @@ const matchLines = function(algo, data) {
             updateSpeed(algo, miner, ...values);
         }
     });
-
-    // lines.map(line => {
-    //     if (line.indexOf('accepted') !== -1) {
-    //         updateSpeed(
-    //             line
-    //             .split('), ')[1]
-    //             .split('yes')[0]
-    //             .trim()
-    //         );
-    //     } else if (line.indexOf('Stratum difficulty') !== -1) {
-    //         updateSpeed(undefined, line.split('Stratum difficulty set to ')[1].trim());
-    //     }
-    // });
 };
 
 const followChild = function(algo) {
@@ -575,28 +730,6 @@ const followChild = function(algo) {
         updateLog(data);
 
         matchLines(algo, data);
-        // console.log(`stdout: ${data}`);
-        // const lines = String(data).split('\n');
-
-        // lines.map(line => {
-        //     switch (algo) {
-        //         case 'DaggerHashimoto':
-        //             if (line.indexOf('Speed') !== -1) {
-        //                 updateSpeed(
-        //                     line
-        //                         .split('Speed ')[1]
-        //                         .split('gpu')[0]
-        //                         .trim()
-        //                 );
-        //             } else if (line.indexOf('Stratum difficulty') !== -1) {
-        //                 updateSpeed(undefined, line.split('Stratum difficulty set to ')[1].trim());
-        //             }
-        //             break;
-        //         default:
-        //             writeLine('\n' + line);
-        //             break;
-        //     }
-        // });
     });
 
     childProcess.on('close', (code, signal) => {
@@ -636,6 +769,7 @@ const setupAlgo = function(key) {
             lastBlockString = '';
             log = '';
             prevAccepted = 0;
+            totalAccepted = 0;
 
             if (_price) {
                 updateRunning(key, price);
@@ -660,7 +794,7 @@ for (const _key in algoKeys) {
 }
 
 const killChild = function(cb, force) {
-    if (!childProcess.killed && algoRunning[prevChild]) {
+    if (childProcess && !childProcess.killed && algoRunning[prevChild]) {
         childProcess.on('close', (code, signal) => {
             if (typeof cb === 'function') {
                 cb(code, signal);
@@ -672,122 +806,16 @@ const killChild = function(cb, force) {
     }
 };
 
-let retryProfitCheckTo;
-
-const changeMiner = function retry() {
-    const algoMineTimeCheck = Date.now() - lastChange > (config.mineAtLeast || 3 * 60 * 1000);
-
-    if (
-        algoMineTimeCheck &&
-        lastHash &&
-        Date.now() - lastHash.getTime() > 20000 &&
-        Date.now() - lastHash.getTime() < 10 * 60 * 1000
-    ) {
-        clearTimeout(retryProfitCheckTo);
-        retryProfitCheckTo = setTimeout(retry, 1000);
-        writeLine('Waiting for accepted share...', 0, cursorPosAfterDetails + 7);
-        return;
-    }
-
-    if (running && !killing && algoMineTimeCheck) {
-        clearTimeout(retryProfitCheckTo);
-        retryProfitCheckTo = undefined;
-        getProfitData(function(err, algo, difference, price) {
-            if (!err && running) {
-                let priceSwitch = false;
-
-                if (conversionRate !== 0) {
-                    priceSwitch = difference * conversionRate > (config.changeThreshold || 0.1);
-                } else {
-                    priceSwitch = difference * 1000 > (config.changeThresholdBtc || 0.02);
-                }
-                // console.log('Run with', algo, (difference * 1000).toFixed(4));
-                if ((childAlgo !== algo && priceSwitch) || typeof childAlgo === 'undefined') {
-                    if (typeof childAlgo !== 'undefined' && childProcess) {
-                        writeLine(
-                            'Kill child ' + childAlgo + ' before starting new...\n',
-                            0,
-                            cursorPosAfterDetails + 8
-                        );
-                        running = false;
-                        killChild(function(code, signal) {
-                            try {
-                                writeLine('Child killed: ' + String(signal), 0, cursorPosAfterDetails + 8);
-                            } catch (e) {
-                                writeLine('Child killed', 0, cursorPosAfterDetails + 8);
-                            }
-
-                            lastChange = Date.now();
-                            startChild[algo](price);
-                            running = true;
-                        }, true);
-                    } else {
-                        lastChange = Date.now();
-                        startChild[algo](price);
-                    }
-                }
-            } else if (err === 'nochange') {
-                writeLine(
-                    'No change in profit data (' + new Date().toLocaleTimeString() + ')...',
-                    0,
-                    cursorPosAfterDetails + 7
-                );
-            } else {
-                writeLine('Error while fetching profit data:', 0, cursorPosAfterDetails + 8);
-                try {
-                    writeLine(JSON.stringify(err), 0, cursorPosAfterDetails + 9, true);
-                } catch (e) {}
-            }
-        });
-    } else if (!algoMineTimeCheck) {
-        const left = (config.mineAtLeast || 3 * 60 * 1000) - (Date.now() - lastChange);
-        const min = Math.floor((left - left % 60000) / 60000);
-        const sec = Math.round((left % 60000) / 1000);
-
-        writeLine(
-            `${childAlgo} change cool off: ${min ? min + ' min' : ''} ${sec ? sec + ' s' : ''}`,
-            0,
-            cursorPosAfterDetails + 7
-        );
-        if (typeof to === 'undefined') {
-            retryProfitCheckTo = setTimeout(changeMiner, left + 100);
-        }
-    }
-};
-
 const getBtcPrices = function retry() {
-    try {
-        https.get('https://blockchain.info/ticker', resp => {
-            let data = '';
-
-            // A chunk of data has been recieved.
-            resp.on('data', chunk => {
-                data = data + chunk;
-            });
-
-            // The whole response has been received. Print out the result.
-            resp
-                .on('end', () => {
-                    let values;
-
-                    try {
-                        values = JSON.parse(data);
-                    } catch (e) {
-                        return;
-                    }
-
-                    conversionRate = values[config.currency || 'EUR']['15m'];
-                    currencySymbol = values[config.currency || 'EUR'].symbol;
-                })
-                .on('error', err => {
-                    writeLine('Error: ' + err.message, 0, cursorPosAfterDetails + 8);
-                    setTimeout(retry, 30000);
-                });
-        });
-    } catch (e) {
-        writeLine('Error: ' + e, 0, cursorPosAfterDetails + 8);
-        setTimeout(retry, 30000);
-    }
+    httpFetch('https://blockchain.info/ticker', (err, result) => {
+        if (!err) {
+            conversionRate = result[config.currency || 'EUR']['15m'];
+            currencySymbol = result[config.currency || 'EUR'].symbol;
+        } else {
+            writeLine('Error: ' + e, 0, cursorPosAfterDetails + 8);
+            setTimeout(retry, 30000);
+        }
+    });
 };
 
 process.stdout.columns = 50;
@@ -796,8 +824,17 @@ process.stdout.rows = 50;
 getBtcPrices();
 setInterval(getBtcPrices, 15 * 60 * 1000);
 
-setTimeout(changeMiner, 1000);
-setInterval(changeMiner, config.updateProfitMargins || 30000);
+const minerLoop = function () {
+    getProfitData((err, profits) => {
+        var change = renderProfitData(err, profits);
+        if (change.length > 0) {
+            switchAlgo(...change);
+        }
+    });
+};
+
+setTimeout(minerLoop, 1000);
+setInterval(minerLoop, config.updateProfitMargins || 30000);
 
 let retrySIGINT = false;
 
