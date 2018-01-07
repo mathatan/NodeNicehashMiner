@@ -12,13 +12,49 @@ First of all few things you need:
 
 ## Preparation
 
-- Install latest XCode and XCode command line tools (`$ sudo xcode-select --install`)
+- Install latest XCode and XCode command line tools
+
+```
+$ sudo xcode-select --install
+```
+
 - Copy XCode 8.33 into `/Applications` folder as `XCode_8_33.app`
-- Install Homebrew (`$ /usr/bin/ruby -e "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/master/install)"`)
-- Install required packages (`$ brew install pkg-config autoconf automake curl openssl llvm`)
-- Link OpenSSL libraries (`$ ln -s /usr/local/include/opt/openssl/include/openssl /usr/local/include/.`) (it should be noted that this is a bit of a security risk, do it on your own volition)
-- Get the tpruvots repository linux branch. (`$ git clone -b linux https://github.com/tpruvot/ccminer.git`)
-- Go into reposity folder and get acinclude.m4 (`$ curl https://source.jasig.org/cas-clients/mod_auth_cas/tags/mod_auth_cas-1.0.9.1/libcurl.m4 -o acinclude.m4`)
+- Install Homebrew
+
+```
+$ /usr/bin/ruby -e "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/master/install)"
+```
+
+- Install required packages
+
+```
+$ brew install pkg-config autoconf automake curl openssl llvm
+```
+
+- Link OpenSSL libraries (it should be noted that this is a possible security risk, do it on your own volition)
+
+```
+$ ln -s /usr/local/include/opt/openssl/include/openssl /usr/local/include/.
+```
+
+- Install NVIDIA software (at which point you do this is not important) add following to your `.profile` (or equilevant) If needed update version
+
+```
+export PATH=$PATH:/Developer/NVIDIA/CUDA-9.0/bin
+export DYLD_LIBRARY_PATH=$DYLD_LIBRARY_PATH:/Developer/NVIDIA/CUDA-9.0/lib
+```
+
+- Get the tpruvots repository `linux` branch
+
+```
+$ git clone -b linux https://github.com/tpruvot/ccminer.git
+```
+
+- Go into reposity folder and get `acinclude.m4`
+
+```
+$ curl https://source.jasig.org/cas-clients/mod_auth_cas/tags/mod_auth_cas-1.0.9.1/libcurl.m4 -o acinclude.m4
+```
 
 ## Source file modifications
 
