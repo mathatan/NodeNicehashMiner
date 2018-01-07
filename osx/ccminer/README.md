@@ -34,7 +34,7 @@ $ brew install pkg-config autoconf automake curl openssl llvm
 - Link OpenSSL libraries (it should be noted that this is a possible security risk, do it on your own volition)
 
 ```
-$ ln -s /usr/local/include/opt/openssl/include/openssl /usr/local/include/.
+$ ln -s /usr/local/opt/openssl/include/openssl /usr/local/include/.
 ```
 
 - Install NVIDIA software (at which point you do this is not important) add following to your `.profile` (or equilevant) If needed update version
@@ -97,7 +97,10 @@ Replace all instances of `rt_error` with `std::runtime_error`
 
 ## Compiling ccminer
 
- - While compiling CUDA code you need to have XCode 8.33 enabled (`$ sudo xcode-select --switch /Applications/Xcode_8_33.app/`)
+ - While compiling CUDA code you need to have XCode 8.33 enabled 
+ ```
+ $ sudo xcode-select --switch /Applications/Xcode_8_33.app/
+ ```
  - Execute following before building:
 
 ```
